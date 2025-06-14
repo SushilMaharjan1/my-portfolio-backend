@@ -10,10 +10,22 @@ const path = require("path");
 dotenv.config();
 
 const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 5000;
+
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+// CORS setup – change this to your Netlify frontend URL
+app.use(cors({
+  origin: "https://capitalcompassioncare.netlify.app", // ✅ replace with your real frontend URL
+}));
+
 app.use(express.json());
 
-// For resume uploads
+// Multer config for resume upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => {
@@ -21,11 +33,25 @@ const storage = multer.diskStorage({
     cb(null, uniqueName);
   },
 });
-const upload = multer({ storage });
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /pdf|doc|docx/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error("Only .pdf, .doc, or .docx files are allowed"));
+  }
+};
+const upload = multer({ storage, fileFilter });
 
-// ---------- CONTACT FORM ROUTE ----------
+// ---------- CONTACT FORM ----------
 app.post("/api/contact", async (req, res) => {
   const { name, email, message } = req.body;
+
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -48,18 +74,18 @@ app.post("/api/contact", async (req, res) => {
     await transporter.sendMail(mailOptions);
     res.json({ message: "Message sent successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Contact form error:", err);
     res.status(500).json({ error: "Failed to send email" });
   }
 });
 
-// ---------- CAREERS FORM WITH RESUME ----------
+// ---------- CAREERS FORM ----------
 app.post("/api/careers", upload.single("resume"), async (req, res) => {
   const { fullName, email, message } = req.body;
   const resume = req.file;
 
-  if (!resume) {
-    return res.status(400).json({ error: "Resume upload failed" });
+  if (!fullName || !email || !resume) {
+    return res.status(400).json({ error: "Full name, email, and resume are required" });
   }
 
   const transporter = nodemailer.createTransport({
@@ -76,7 +102,7 @@ app.post("/api/careers", upload.single("resume"), async (req, res) => {
     subject: "New Career Application",
     html: `<p><strong>Name:</strong> ${fullName}</p>
            <p><strong>Email:</strong> ${email}</p>
-           <p><strong>Message:</strong> ${message}</p>`,
+           <p><strong>Message:</strong> ${message || "N/A"}</p>`,
     attachments: [
       {
         filename: resume.originalname,
@@ -89,10 +115,12 @@ app.post("/api/careers", upload.single("resume"), async (req, res) => {
     await transporter.sendMail(mailOptions);
     res.json({ message: "Application submitted successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Career form error:", err);
     res.status(500).json({ error: "Failed to send application" });
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ---------- START SERVER ----------
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
