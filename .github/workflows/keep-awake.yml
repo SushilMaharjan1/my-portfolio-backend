@@ -1,0 +1,14 @@
+name: Keep Render Server Awake
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes UTC
+  workflow_dispatch:        # Optional manual trigger
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Render Backend
+        run: curl -I https://my-portfolio-backend-750q.onrender.com/
