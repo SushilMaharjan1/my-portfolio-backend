@@ -20,7 +20,7 @@ if (!fs.existsSync(uploadDir)) {
 
 // CORS: Update with your frontend URL
 app.use(cors({
-  origin: "https://capitalcompassioncare.netlify.app",
+  origin: "https://capitalcompassioncare.com.au",
 }));
 
 // Only apply JSON parser for specific routes
