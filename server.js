@@ -18,14 +18,16 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// CORS setup – change this to your Netlify frontend URL
+// CORS: Update with your frontend URL
 app.use(cors({
-  origin: "https://capitalcompassioncare.netlify.app", // ✅ replace with your real frontend URL
+  origin: "https://capitalcompassioncare.netlify.app",
 }));
 
-app.use(express.json());
+// Only apply JSON parser for specific routes
+app.use("/api/contact", express.json());
+app.use(express.urlencoded({ extended: true })); // Safe for both forms and file uploads
 
-// Multer config for resume upload
+// ----------------- Multer Setup -----------------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => {
@@ -33,19 +35,18 @@ const storage = multer.diskStorage({
     cb(null, uniqueName);
   },
 });
+
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /pdf|doc|docx/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
-  if (extname && mimetype) {
-    return cb(null, true);
-  } else {
-    cb(new Error("Only .pdf, .doc, or .docx files are allowed"));
-  }
+  const isValidExt = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const isValidMime = allowedTypes.test(file.mimetype);
+  if (isValidExt && isValidMime) cb(null, true);
+  else cb(new Error("Only .pdf, .doc, or .docx files are allowed"));
 };
+
 const upload = multer({ storage, fileFilter });
 
-// ---------- CONTACT FORM ----------
+// ----------------- CONTACT FORM -----------------
 app.post("/api/contact", async (req, res) => {
   const { name, email, message } = req.body;
 
@@ -65,9 +66,11 @@ app.post("/api/contact", async (req, res) => {
     from: email,
     to: process.env.EMAIL_USER,
     subject: "New Contact Form Submission",
-    html: `<p><strong>Name:</strong> ${name}</p>
-           <p><strong>Email:</strong> ${email}</p>
-           <p><strong>Message:</strong> ${message}</p>`,
+    html: `
+      <p><strong>Name:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Message:</strong> ${message}</p>
+    `,
   };
 
   try {
@@ -79,48 +82,57 @@ app.post("/api/contact", async (req, res) => {
   }
 });
 
-// ---------- CAREERS FORM ----------
-app.post("/api/careers", upload.single("resume"), async (req, res) => {
-  const { fullName, email, message } = req.body;
-  const resume = req.file;
+// ----------------- CAREERS FORM -----------------
+app.post("/api/careers", (req, res) => {
+  upload.single("resume")(req, res, async (err) => {
+    if (err) {
+      console.error("Multer error:", err);
+      return res.status(400).json({ error: err.message });
+    }
 
-  if (!fullName || !email || !resume) {
-    return res.status(400).json({ error: "Full name, email, and resume are required" });
-  }
+    const { fullName, email, message } = req.body;
+    const resume = req.file;
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+    if (!fullName || !email || !resume) {
+      return res.status(400).json({ error: "Full name, email, and resume are required" });
+    }
 
-  const mailOptions = {
-    from: email,
-    to: process.env.EMAIL_USER,
-    subject: "New Career Application",
-    html: `<p><strong>Name:</strong> ${fullName}</p>
-           <p><strong>Email:</strong> ${email}</p>
-           <p><strong>Message:</strong> ${message || "N/A"}</p>`,
-    attachments: [
-      {
-        filename: resume.originalname,
-        path: resume.path,
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
-    ],
-  };
+    });
 
-  try {
-    await transporter.sendMail(mailOptions);
-    res.json({ message: "Application submitted successfully" });
-  } catch (err) {
-    console.error("Career form error:", err);
-    res.status(500).json({ error: "Failed to send application" });
-  }
+    const mailOptions = {
+      from: email,
+      to: process.env.EMAIL_USER,
+      subject: "New Career Application",
+      html: `
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Message:</strong> ${message || "N/A"}</p>
+      `,
+      attachments: [
+        {
+          filename: resume.originalname,
+          path: resume.path,
+        },
+      ],
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      res.json({ message: "Application submitted successfully" });
+    } catch (err) {
+      console.error("Career form error:", err);
+      res.status(500).json({ error: "Failed to send application" });
+    }
+  });
 });
 
-// ---------- START SERVER ----------
+// ----------------- SERVER START -----------------
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
