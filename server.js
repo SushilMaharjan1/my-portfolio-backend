@@ -18,14 +18,28 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// CORS: Update with your frontend URL
-app.use(cors({
-  origin: "https://capitalcompassioncare.com.au",
-}));
+// ✅ Correct CORS setup to allow both www and non-www
+const allowedOrigins = [
+  'https://capitalcompassioncare.com.au',
+  'https://www.capitalcompassioncare.com.au'
+];
 
-// Only apply JSON parser for specific routes
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
+
+// Middleware
 app.use("/api/contact", express.json());
-app.use(express.urlencoded({ extended: true })); // Safe for both forms and file uploads
+app.use(express.urlencoded({ extended: true })); // for form and file uploads
 
 // ----------------- Multer Setup -----------------
 const storage = multer.diskStorage({
